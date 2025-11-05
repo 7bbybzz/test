@@ -559,10 +559,6 @@
       color: white;
       transform: translateY(-2px);
     }
-    .navbar button.active {
-      background: var(--primary);
-      color: white;
-    }
     /* === SEARCH & FILTER === */
     .search-bar {
       position: relative;
@@ -879,11 +875,11 @@
       <!-- CREDIT REDEEM PAGE -->
       <div id="credits-page" class="page">
         <div class="credit-redeem">
-          <h2>ADD BALANCE</h2>
-          <p>Pay BTC to load balance. Minimum $25 to shop.</p>
+          <h2>REDEEM CREDITS</h2>
+          <p>Minimum $25 to shop. Add more anytime.</p>
           <div class="credit-input-group">
             <input type="number" id="credit-input" placeholder="25.00" min="25" step="0.01">
-            <button onclick="addBalanceToCart()">ADD TO CART</button>
+            <button onclick="addCredit()">ADD TO CART</button>
           </div>
           <div class="credit-options">
             <div class="credit-option active" onclick="setCredit(25)">$25</div>
@@ -891,7 +887,7 @@
             <div class="credit-option" onclick="setCredit(100)">$100</div>
             <div class="credit-option" onclick="setCredit(200)">$200</div>
           </div>
-          <p class="credit-note">You need <strong>$25 balance</strong> to checkout. <br>Low-balance cards start at <strong>$12</strong>.</p>
+          <p class="credit-note">You need <strong>$25 credit</strong> to purchase any card. <br>Low balance cards start at <strong>$12</strong>.</p>
         </div>
       </div>
 
@@ -967,7 +963,7 @@
       </div>
 
       <div id="fullz-page" class="page">
-        <h2 style="text-align:center; color:var(--primary); margin:20px 0;">PREMIUM DATA</h2>
+        <h2 style="text-align:center; color:var(--primary); margin:20px  ago;">PREMIUM DATA</h2>
         <div class="item-container" id="fullzContainer"></div>
       </div>
 
@@ -986,7 +982,7 @@
   <script>
     // === CONFIG ===
     const BTC_BASE = "bc1qrakrunnin";
-    const MIN_BALANCE = 25;
+    const MIN_CREDIT = 25;
     const ADMIN_USER = 'rakrunnin';
     const ADMIN_PASS = 'Xohlt123';
     const ADMIN_BONUS = 300;
@@ -1060,20 +1056,23 @@
       event.target.classList.add('active');
     }
 
-    function addBalanceToCart() {
+    function addCredit() {
       const input = document.getElementById('credit-input');
       const amount = parseFloat(input.value);
-      if (isNaN(amount) || amount < MIN_BALANCE) {
-        showPopup(`Minimum $${MIN_BALANCE} required.`);
+      if (isNaN(amount) || amount < MIN_CREDIT) {
+        showPopup(`Minimum $${MIN_CREDIT} required.`);
         return;
       }
-      cart.push({ name: `Balance $${amount.toFixed(2)}`, price: amount, category: 'balance' });
-      localStorage.setItem('cart', JSON.stringify(cart));
-      updateCartBadge();
-      showPopup(`$${amount.toFixed(2)} balance added to cart! Pay BTC at checkout.`);
+      if (!currentUser) {
+        showPopup('Login first to add credit.');
+        showPage('account');
+        return;
+      }
+      users[currentUser].credit = (users[currentUser].credit || 0) + amount;
+      localStorage.setItem('users', JSON.stringify(users));
+      updateCreditDisplay();
+      showPopup(`+$${amount.toFixed(2)} credit added!`);
       input.value = '25.00';
-      document.querySelectorAll('.credit-option').forEach(el => el.classList.remove('active'));
-      document.querySelector('.credit-option').classList.add('active');
     }
 
     function updateCreditDisplay() {
@@ -1104,7 +1103,7 @@
       }
 
       updateCreditDisplay();
-      showPage('cards');
+      showPage('credits');
     }
 
     function createAccount() {
@@ -1142,9 +1141,6 @@
           page.classList.add('active');
         }, 100);
       }
-      document.querySelectorAll('.navbar button').forEach(b => b.classList.remove('active'));
-      const btn = Array.from(document.querySelectorAll('.navbar button')).find(b => b.textContent.toLowerCase().includes(id));
-      if (btn) btn.classList.add('active');
     }
 
     function showPopup(msg) {
@@ -1171,29 +1167,14 @@
 
     // === SHOP INIT ===
     function initShop() {
-      // Navbar
-      const nav = document.getElementById('navbar');
-      ['cards', 'accounts', 'malware', 'fullz'].forEach(cat => {
-        const btn = document.createElement('button');
-        btn.textContent = cat.toUpperCase();
-        btn.onclick = () => showPage(cat);
-        nav.appendChild(btn);
-      });
-      const creditsBtn = document.createElement('button');
-      creditsBtn.textContent = 'BALANCE';
-      creditsBtn.onclick = () => showPage('credits');
-      nav.appendChild(creditsBtn);
-
       generateItems('cards', cardData, 'cardContainer');
       generateItems('accounts', accountData, 'accountContainer');
       generateItems('malware', malwareData, 'malwareContainer');
       generateItems('fullz', fullzData, 'fullzContainer');
       updateCartBadge();
-      renderCart();
-
       if (currentUser && users[currentUser]) {
         updateCreditDisplay();
-        showPage('cards');
+        showPage('credits');
       } else {
         showPage('account');
       }
@@ -1235,8 +1216,8 @@
         return;
       }
       const credit = users[currentUser].credit || 0;
-      if (credit < MIN_BALANCE) {
-        showPopup(`Need $${MIN_BALANCE} balance to checkout. Add balance first.`);
+      if (credit < price) {
+        showPopup(`Need $${price - credit} more credit.`);
         showPage('credits');
         return;
       }
@@ -1284,6 +1265,7 @@
       if (cart.length === 0) return showPopup('Cart empty.');
       const total = cart.reduce((sum, item) => sum + item.price, 0);
       const btcAmount = (total / 100000).toFixed(8);
+      document.getElementById('btc-amount-display').textContent = `Amount: ${btcAmount} BTC (~$${total})`;
       document.getElementById('btc-address-display').textContent = BTC_BASE + Math.random().toString(36).substr(2, 9);
       new QRCode(document.getElementById('qr-code'), {
         text: `bitcoin:${BTC_BASE}?amount=${btcAmount}`,
@@ -1328,7 +1310,7 @@
       document.getElementById('balance-value').textContent = `$100 - $${val}`;
     }
     function searchItems(query) {
-      // Placeholder
+      // Placeholder - implement full search later
     }
 
     // === MENU & THEME ===
